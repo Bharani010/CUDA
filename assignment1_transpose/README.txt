@@ -1,0 +1,386 @@
+Assignment 1
+
+Optimize the matrix transpose kernel to achieve better performance.
+
+Please do not modify the naiveTransposeKernel kernel as it's a baseline reference.
+Your main work is in the file transpose_device.cu. 
+
+Tasks to do:
+1. complete the shmemTransposeKernel() kernel; read the function comments there;
+2. complete the optimalTransposeKernel() kernel; here you can apply any techniques you
+   want; the goal is the highest performance. 
+
+To build the binary:
+$ make
+
+To run the executable:
+$ ./transpose
+
+You'll see some output like this
+$ ./transpose
+Index of the GPU with the lowest temperature: 0 (60 C)
+Time limit for this program set to 10 seconds
+Size 512 naive CPU: 0.850624 ms
+Size 512 GPU memcpy: 0.043104 ms
+Size 512 naive GPU: 0.143360 ms
+Size 512 shmem GPU: 0.027648 ms
+Size 512 optimal GPU: 0.023392 ms
+
+Size 1024 naive CPU: 6.832416 ms
+Size 1024 GPU memcpy: 0.023424 ms
+Size 1024 naive GPU: 0.051200 ms
+Size 1024 shmem GPU: 0.046080 ms
+Size 1024 optimal GPU: 0.044032 ms
+
+Size 2048 naive CPU: 33.075394 ms
+Size 2048 GPU memcpy: 0.072256 ms
+Size 2048 naive GPU: 0.164864 ms
+Size 2048 shmem GPU: 0.167840 ms
+Size 2048 optimal GPU: 0.167808 ms
+
+Size 4096 naive CPU: 199.228729 ms
+Size 4096 GPU memcpy: 0.222240 ms
+Size 4096 naive GPU: 0.618496 ms
+Size 4096 shmem GPU: 0.615424 ms
+Size 4096 optimal GPU: 0.614400 ms
+
+After you are satisfied with your work, to submit the assignment:
+
+$ make submit
+
+You should not see any errors and you should see a zip file locally and also
+see your zip file copied to /mnt/data1/submissions/assignment1
+
+Quiz questions; 
+
+
+PART 1
+
+Question 1.1: Latency Hiding (5 points)
+---------------------------------------
+
+Approximately how many arithmetic instructions does it take to hide the latency
+of a single arithmetic instruction on a GK110?
+
+Assume all of the arithmetic instructions are independent (ie have no
+instruction dependencies).
+
+You do not need to consider the number of execution cores on the chip.
+
+Hint: What is the latency of an arithmetic instruction? How many instructions
+can a GK110 begin issuing in 1 clock cycle (assuming no dependencies)?
+
+Answer: GK110 has roughly 6 clock cycles and that the scheduler can issue about 2 arithmetic instructions per cycle 
+so it requires 6 cycles × 2 instructions/cycle = 12 independent arithmetic instructions.
+
+
+Question 1.2: Thread Divergence (6 points)
+------------------------------------------
+
+Let the block shape be (32, 32, 1).
+
+(a)
+int idx = threadIdx.y + blockSize.y * threadIdx.x;
+if (idx % 32 < 16)
+    foo();
+else
+    bar();
+
+Does this code diverge? Why or why not?
+Answer for A) No, as the condition becomes if (threadIdx.y < 16), as each row of 32 threads has uniform threadIdx.y, every thread follows the same ranch.
+
+(b)
+const float pi = 3.14;
+float result = 1.0;
+for (int i = 0; i < threadIdx.x; i++)
+    result *= pi;
+
+Does this code diverge? Why or why not? (This is a bit of a trick question,
+either "yes" or "no can be a correct answer with appropriate explanation.)
+
+Answer for b) yes, because each thread in a warp has a different threadIdx.x value, so they execute a different number of loop iterations causing the threads to take different ways.
+
+
+
+Question 1.3: Coalesced Memory Access (9 points)
+------------------------------------------------
+
+Let the block shape be (32, 32, 1). Let data be a (float *) pointing to global
+memory and let data be 128 byte aligned (so data % 128 == 0).
+
+Consider each of the following access patterns.
+
+(a)
+data[threadIdx.x + blockSize.x * threadIdx.y] = 1.0;
+
+Is this write coalesced? How many 128 byte cache lines does this write to?
+
+(b)
+data[threadIdx.y + blockSize.y * threadIdx.x] = 1.0;
+
+Is this write coalesced? How many 128 byte cache lines does this write to?
+
+(c)
+data[1 + threadIdx.x + blockSize.x * threadIdx.y] = 1.0;
+
+Is this write coalesced? How many 128 byte cache lines does this write to?
+
+Answer (a):
+Yes, the write is coalesced. Each warp accesses 32 consecutive floats, fitting exactly into 128 bytes. Overall, 32 cache lines are used
+
+Answer (b):
+No, the write is not coalesced. In each warp, threads write to addresses that are 128 bytes apart, so a single warp touches 32 separate cache lines.
+
+Answer (c):
+Yes, the write is coalesced in that the threads in a warp access consecutive memory addresses, but due to the 1-float offset, each warp’s access spans 2 cache lines instead of 1.
+
+
+Question 1.4: Bank Conflicts and Instruction Dependencies (15 points)
+---------------------------------------------------------------------
+
+Let's consider multiplying a 32 x 128 matrix with a 128 x 32 element matrix.
+This outputs a 32 x 32 matrix. We'll use 32 ** 2 = 1024 threads and each thread
+will compute 1 output element. Although its not optimal, for the sake of
+simplicity let's use a single block, so grid shape = (1, 1, 1),
+block shape = (32, 32, 1).
+
+For the sake of this problem, let's assume both the left and right matrices have
+already been stored in shared memory are in column major format. This means the
+element in the ith row and jth column is accessible at lhs[i + 32 * j] for the
+left hand side and rhs[i + 128 * j] for the right hand side.
+
+This kernel will write to a variable called output stored in shared memory.
+
+Consider the following kernel code:
+
+int i = threadIdx.x;
+int j = threadIdx.y;
+for (int k = 0; k < 128; k += 2) {
+    output[i + 32 * j] += lhs[i + 32 * k] * rhs[k + 128 * j];
+    output[i + 32 * j] += lhs[i + 32 * (k + 1)] * rhs[(k + 1) + 128 * j];
+}
+
+(a)
+Are there bank conflicts in this code? If so, how many ways is the bank conflict
+(2-way, 4-way, etc)?
+
+Answer (a):No bank conflicts occur. The lhs accesses are conflict free because different threads use different i values, and the rhs accesses, although all threads in a warp read from the same bank, are handled by the hardware’s broadcast mechanism (a 32‐way broadcast) and thus do not cause a conflict penalty.
+
+
+(b)
+Expand the inner part of the loop (below)
+
+output[i + 32 * j] += lhs[i + 32 * k] * rhs[k + 128 * j];
+output[i + 32 * j] += lhs[i + 32 * (k + 1)] * rhs[(k + 1) + 128 * j];
+
+into "psuedo-assembly" as was done in the coordinate addition example in lecture
+4.
+
+There's no need to expand the indexing math, only to expand the loads, stores,
+and math. Notably, the operation a += b * c can be computed by a single
+instruction called a fused multiply add (FMA), so this can be a single
+instruction in your "psuedo-assembly".
+
+Hint: Each line should expand to 5 instructions.
+Answer:
+1st line of the loop:
+-LD R1, [lhs + i + 32*k] ---(Load lhs element into register R1.)
+-LD R2, [rhs + k + 128*j] ---(Load rhs element into register R2.)
+-LD R3, [output + i + 32*j] --- (Load current output value into R3.)
+-FMA R3, R1, R2, R3 --- (Compute R3 = R1 * R2 + R3.)
+-ST [output + i + 32*j], R3 --- (Write updated output back.)
+
+2nd line:
+LD R4, [lhs + i + 32*(k+1)]
+LD R5, [rhs + (k+1) + 128*j]
+LD R6, [output + i + 32*j]
+FMA R6, R4, R5, R6
+ST [output + i + 32*j], R6
+
+
+
+(c)
+Identify pairs of dependent instructions in your answer to part b.
+
+The FMA instruction depends on the results of the two preceding loads R1 and R2 as well as the load of the current output value in R3.
+The Store instruction depends on the result of the FMA.
+
+Answer: for line 1:
+
+(LD R1 → FMA)
+(LD R2 → FMA)
+(LD R3 → FMA)
+(FMA → ST)
+Similarly, for line 2:
+
+(LD R4 → FMA)
+(LD R5 → FMA)
+(LD R6 → FMA)
+(FMA → ST)
+
+(d)
+Rewrite the code given at the beginning of this problem to minimize instruction
+dependencies. You can add or delete instructions (deleting an instruction is a
+valid way to get rid of a dependency!) but each iteration of the loop must still
+process 2 values of k.
+
+Answer: using separate accumulators so that the two partial products in each iteration can be computed independently and then combined.
+
+int i = threadIdx.x;
+int j = threadIdx.y;
+int outIndex = i + 32*j;
+float acc0 = 0.0f;
+float acc1 = 0.0f;
+for (int k = 0; k < 128; k += 2) {
+    float a = lhs[i + 32*k] * rhs[k + 128*j];
+    float b = lhs[i + 32*(k+1)] * rhs[(k+1) + 128*j];
+    acc0 += a;
+    acc1 += b;
+}
+output[outIndex] = acc0 + acc1;
+
+
+(e)
+Can you think of any other anything else you can do that might make this code
+run faster?
+answer: maybe use more than 2 accumulators to reduce dependency and then sum them together.
+and processing  4 or 8 values per iteration in the loop to reduce loop overhead
+
+
+PART 2 - Matrix transpose optimization (65 points)
+--------------------------------------------------
+
+Optimize the CUDA matrix transpose implementations in transpose_cuda.cu. Read
+ALL of the TODO comments. Matrix transpose is a common exercise in GPU
+optimization, so do not search for existing GPU matrix transpose code on the
+internet.
+
+Your transpose code only need to be able to transpose square matrices where the
+side length is a multiple of 64.
+
+The initial implementation has each block of 1024 threads handle a 64x64 block
+of the matrix, but you can change anything about the kernel if it helps obtain
+better performance.
+
+The main method of transpose.cc already checks for correctness for all transpose
+results, so there should be an assertion failure if your kernel produces incorrect
+output.
+
+The purpose of the shmemTransposeKernel is to demonstrate proper usage of global
+and shared memory. The optimalTransposeKernel should be built on top of
+shmemTransposeKernel and should incorporate any "tricks" such as ILP, loop
+unrolling, vectorized IO, etc that have been discussed in class.
+
+You can compile and run the code by running
+
+make transpose
+./transpose
+
+and the build process was tested on minuteman. If this does not work on haru for
+you, be sure to add the lines
+
+export PATH=/usr/local/cuda-6.5/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda-6.5/lib64:$LD_LIBRARY_PATH
+
+to your ~/.profile file (and then exit and ssh back in to restart your shell).
+
+On OS X, you may have to run or add to your .bash_profile the command
+
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/cuda/lib/
+
+in order to get dynamic library linkage to work correctly.
+
+The transpose program takes 2 optional arguments: input size and method. Input
+size must be one of -1, 512, 1024, 2048, 4096, and method must be one all,
+cpu, gpu_memcpy, naive, shmem, optimal. Input size is the first argument and
+defaults to -1. Method is the second argument and defaults to all. You can pass
+input size without passing method, but you cannot pass method without passing an
+input size.
+
+Examples:
+./transpose
+./transpose 512
+./transpose 4096 naive
+./transpose -1 optimal
+
+Copy paste the output of ./transpose.cc into README.txt once you are done.
+Describe the strategies used for performance in either block comments over the
+kernel (as done for naiveTransposeKernel) or in README.txt.
+
+here is the output:
+sveerepa@ubuntuserver:~/assignment1_transpose$ make transpose
+make: 'transpose' is up to date.
+sveerepa@ubuntuserver:~/assignment1_transpose$ ./transpose
+Index of the GPU with the lowest temperature: 0 (55 C)
+Time limit for this program set to 10 seconds
+Size 512 naive CPU: 0.848416 ms
+Size 512 GPU memcpy: 0.030272 ms
+Size 512 naive GPU: 0.145408 ms
+Size 512 shmem GPU: 0.023552 ms
+Size 512 optimal GPU: 0.015296 ms
+
+Size 1024 naive CPU: 6.895520 ms
+Size 1024 GPU memcpy: 0.022880 ms
+Size 1024 naive GPU: 0.054272 ms
+Size 1024 shmem GPU: 0.018432 ms
+Size 1024 optimal GPU: 0.018432 ms
+
+Size 2048 naive CPU: 30.226528 ms
+Size 2048 GPU memcpy: 0.075904 ms
+Size 2048 naive GPU: 0.175104 ms
+Size 2048 shmem GPU: 0.072704 ms
+Size 2048 optimal GPU: 0.071680 ms
+
+Size 4096 naive CPU: 184.498810 ms
+Size 4096 GPU memcpy: 0.225280 ms
+Size 4096 naive GPU: 0.673792 ms
+Size 4096 shmem GPU: 0.268288 ms
+Size 4096 optimal GPU: 0.269312 ms
+
+sveerepa@ubuntuserver:~/assignment1_transpose$ ./transpose 512 naive
+Index of the GPU with the lowest temperature: 0 (58 C)
+Time limit for this program set to 10 seconds
+Size 512 naive GPU: 0.142912 ms
+
+sveerepa@ubuntuserver:~/assignment1_transpose$ ./transpose 4096 optimal
+Index of the GPU with the lowest temperature: 0 (60 C)
+Time limit for this program set to 10 seconds
+Size 4096 optimal GPU: 0.515648 ms
+
+
+
+
+
+
+BONUS (+5 points, maximum set score is 100 even with bonus)
+--------------------------------------------------------------------------------
+
+Mathematical scripting environments such as Matlab or Python + Numpy often
+encourage expressing algorithms in terms of vector operations because they offer
+a convenient and performant interface. For instance, one can add 2 n-component
+vectors (a and b) in Numpy with c = a + b.
+
+This is often implemented with something like the following code:
+
+void vec_add(float *left, float *right, float *out, int size) {
+    for (int i = 0; i < size; i++)
+        out[i] = left[i] + right[i];
+}
+
+Consider the code
+
+a = x + y + z
+
+where x, y, z are n-component vectors.
+
+One way this could be computed would be
+
+vec_add(x, y, a, n);
+vec_add(a, z, a, n);
+
+In what ways is this code (2 calls to vec_add) worse than the following?
+
+for (int i = 0; i < n; i++)
+    a[i] = x[i] + y[i] + z[i];
+
+List at least 2 ways
