@@ -1,0 +1,22 @@
+Rendering to 1000x1000 image
+Loaded scene with 315 circles
+Loaded scene with 315 circles
+---------------------------------------------------------
+Initializing CUDA for CudaRenderer
+Found 1 CUDA devices
+Device 0: NVIDIA GeForce RTX 3080
+   SMs:        68
+   Global mem: 9903 MB
+   CUDA Cap:   8.6
+---------------------------------------------------------
+
+Running benchmark, 1 frames, beginning at frame 0 ...
+Advancing animation for scene 6, frame 0
+Copying image data from device
+Mismatch detected at pixel [88][126], value = 0.500000, expected 1.000000 for color Red
+Mismatch detected at pixel [88][126], value = 0.500000, expected 1.000000 for color Blue
+Mismatch detected at pixel [88][127], value = 0.250000, expected 1.000000 for color Red
+Mismatch detected at pixel [88][127], value = 0.250000, expected 1.000000 for color Blue
+Mismatch detected at pixel [88][128], value = 0.500000, expected 1.000000 for color Red
+Mismatch detected at pixel [88][128], value = 0.500000, expected 1.000000 for color Blue
+ERROR : Mismatch detected between reference and actual

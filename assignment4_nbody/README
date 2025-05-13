@@ -1,0 +1,10 @@
+You may only modify the gpu.cu file and leave other files alone.
+
+
+The starter code already build and run correctly, but it implements a
+naive O(n^2) n-body algorithm.  Your job is to
+
+1) reduce algorithmic time complexity from quadratic to linear;
+2) implement the linear time algorithm in CUDA and optimize its performance
+
+Your code should be tested with #particles in the range of 50,000 - 1,000,000. 

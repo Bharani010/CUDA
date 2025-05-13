@@ -1,0 +1,23 @@
+Rendering to 1000x1000 image
+Loaded scene with 100000 circles
+Loaded scene with 100000 circles
+---------------------------------------------------------
+Initializing CUDA for CudaRenderer
+Found 1 CUDA devices
+Device 0: NVIDIA GeForce RTX 3080
+   SMs:        68
+   Global mem: 9903 MB
+   CUDA Cap:   8.6
+---------------------------------------------------------
+
+Running benchmark, 1 frames, beginning at frame 0 ...
+Advancing animation for scene 3, frame 0
+Copying image data from device
+Mismatch detected at pixel [512][299], value = 0.333543, expected 0.478961 for color Green
+***************** Correctness check passed **************************
+Clear:    0.1555 ms
+Advance:  0.0040 ms
+Render:   14.2419 ms
+Total:    14.4014 ms
+
+Overall:  4.5718 sec (note units are seconds)

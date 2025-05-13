@@ -1,0 +1,22 @@
+Rendering to 1000x1000 image
+Loaded scene with 10000 circles
+---------------------------------------------------------
+Initializing CUDA for CudaRenderer
+Found 1 CUDA devices
+Device 0: NVIDIA GeForce RTX 3080
+   SMs:        68
+   Global mem: 9903 MB
+   CUDA Cap:   8.6
+---------------------------------------------------------
+
+Running benchmark, 4 frames, beginning at frame 0 ...
+max: 2649, min: 615, avg: 1890.658203
+max: 2649, min: 615, avg: 1890.658203
+max: 2649, min: 615, avg: 1890.658203
+max: 2649, min: 615, avg: 1890.658203
+Clear:    0.0363 ms
+Advance:  0.0005 ms
+Render:   17.6341 ms
+Total:    17.6709 ms
+
+Overall:  0.0707 sec (note units are seconds)
